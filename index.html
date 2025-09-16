@@ -1,46 +1,32 @@
-<script>
-// Direction indicators
-function drawEntity(ctx, entity, color, dirX, dirY) {
-  ctx.fillStyle = color;
-  ctx.fillRect(entity.x, entity.y, entity.size, entity.size);
-  // Facing arrow
-  ctx.fillStyle = "white";
-  ctx.beginPath();
-  ctx.moveTo(entity.x + entity.size/2, entity.y + entity.size/2);
-  ctx.lineTo(entity.x + entity.size/2 + dirX*10, entity.y + entity.size/2 + dirY*10);
-  ctx.stroke();
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Top-Down Shooter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="gba-container">
+    <canvas id="gameCanvas" width="640" height="480"></canvas>
 
-// Replace player/enemy drawing:
-function drawGame() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+    <!-- Virtual Controls -->
+    <div id="controls">
+      <div class="dpad">
+        <button id="up">▲</button>
+        <div>
+          <button id="left">◀</button>
+          <button id="down">▼</button>
+          <button id="right">▶</button>
+        </div>
+      </div>
+      <div class="buttons">
+        <button id="shoot">A</button>
+        <button id="start">Start</button>
+      </div>
+    </div>
+  </div>
 
-  // Walls
-  ctx.fillStyle = "#555";
-  walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
-
-  // Exit door
-  ctx.fillStyle = hasKey ? "green" : "red";
-  ctx.fillRect(exitZone.x, exitZone.y, exitZone.w, exitZone.h);
-
-  // Key
-  if (!hasKey) {
-    ctx.fillStyle = "yellow";
-    ctx.fillRect(keyItem.x, keyItem.y, 15, 15);
-  }
-
-  // Player
-  drawEntity(ctx, player, "blue", player.dirX, player.dirY);
-
-  // Enemies
-  enemies.forEach(e => drawEntity(ctx, e, "red", e.dirX, e.dirY));
-
-  // Bullets
-  ctx.fillStyle = "orange";
-  bullets.forEach(b => ctx.fillRect(b.x, b.y, 5, 5));
-
-  // HUD
-  ctx.fillStyle = "white";
-  ctx.fillText("Health: " + player.health, 10, 20);
-  ctx.fillText("Keys: " + (hasKey ? "1/1" : "0/1"), 10, 40);
-}
+  <script src="game.js"></script>
+</body>
+</html>
