@@ -1,510 +1,244 @@
-// game.js - Top-Down Retro Shooter
-// Author: Generated starter — extend as needed
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-(function(){
-  /*** CONFIG ***/
-  const BASE_W = 320, BASE_H = 240; // game logical resolution (pixel-art)
-  const SCALE = 2;                   // displayed upscale (canvas CSS handles pixelation)
-  const MAX_BULLETS = 6;
-  const PLAYER_SPEED = 1.8;
-  const BULLET_SPEED = 4.5;
-  const ENEMY_SPEED = 0.8;
-  const TILE = 16;
+let keys = {};
+let bullets = [];
+let enemies = [];
+let walls = [];
+let keyItem = {};
+let exitZone = {};
+let hasKey = false;
+let currentLevel = 0;
+let gameState = "playing"; // playing, win, lose
 
-  /*** UTIL ***/
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function rectIntersect(a,b){
-    return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
-  }
-  function dist(a,b){ const dx=a.x-b.x,dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+// Player object
+let player = {
+  x: 50, y: 50, size: 20,
+  speed: 2,
+  dirX: 1, dirY: 0,
+  health: 3
+};
 
-  /*** CANVAS SETUP ***/
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  // scale up to fit CSS size while keeping pixelated look (CSS already sets display size)
-  // We'll render at BASE_W x BASE_H
-  canvas.width = BASE_W;
-  canvas.height = BASE_H;
-  ctx.imageSmoothingEnabled = false;
-
-  // init input
-  input.init(canvas);
-
-  /*** GAME STATE ***/
-  const state = {
-    levelIndex: 0,
-    levels: [],
-    player: null,
-    bullets: [],
-    enemies: [],
-    pickups: [],
-    walls: [],
-    keysCollected: 0,
-    paused: false,
-    gameOver: false
-  };
-
-  /*** LEVELS: grid-based layout arrays (0 = empty, 1 = wall, 2 = door locked, 3 = key) 
-       You can edit or add more levels here. Each tile is TILE pixels (16).
-       Levels are small for demo; expand to larger arrays for big maps.
-  ***/
-  state.levels.push({
-    name: "Infiltration: Sector A",
-    width: 20, height: 15,
-    grid: [
-      // 20 cells per row, 15 rows
-      // We'll create a simple base layout by rows (0..19)
-      // top border
-      ...Array(20).fill(1),
-      // middle rows with walls and corridors (repeat 13 rows)
-      ...Array(13).fill(0).flatMap((_,r)=> {
-        // r from 0..12 -> produce 20 cells
-        const row = new Array(20).fill(0);
-        row[0]=1; row[19]=1; // side walls
-        if (r===3 || r===7 || r===10){
-          for(let c=2;c<18;c++) row[c]=1; // horizontal wall
-          row[9]=0; // gap
-        }
-        return row;
-      }),
-      // bottom border
-      ...Array(20).fill(1)
-    ],
-    playerStart: {x: 2*TILE+2, y: 2*TILE+2},
-    enemiesDef: [
-      {x: 11*TILE, y: 2*TILE, patrol: [{x:11*TILE,y:2*TILE},{x:16*TILE,y:2*TILE}]},
-      {x: 16*TILE, y: 9*TILE, patrol: [{x:16*TILE,y:9*TILE},{x:6*TILE,y:9*TILE}]}
-    ],
-    pickupsDef: [
-      {type:'key', x: 17*TILE, y: 12*TILE}
-    ],
-    doorsDef: [
-      {x: 18*TILE, y: 6*TILE, locked:true}
+// Levels
+const levels = [
+  {
+    walls: [{x:100,y:100,w:200,h:20},{x:300,y:200,w:20,h:200}],
+    key: {x:400,y:100},
+    exit: {x: 550, y: 250, w: 30, h: 50},
+    enemies: [
+      {x:150,y:150,size:20,dirX:1,dirY:0,health:1,speed:1}
     ]
+  },
+  {
+    walls: [{x:200,y:200,w:200,h:20},{x:150,y:300,w:20,h:200}],
+    key: {x:250,y:100},
+    exit: {x: 100, y: 400, w: 30, h: 50},
+    enemies: [
+      {x:200,y:250,size:20,dirX:0,dirY:1,health:1,speed:1},
+      {x:350,y:350,size:20,dirX:-1,dirY:0,health:1,speed:1}
+    ]
+  },
+  {
+    walls: [{x:50,y:150,w:300,h:20},{x:400,y:100,w:20,h:300}],
+    key: {x:500,y:150},
+    exit: {x: 600, y: 400, w: 30, h: 50},
+    enemies: [
+      {x:200,y:200,size:20,dirX:1,dirY:0,health:1,speed:2},
+      {x:450,y:250,size:20,dirX:0,dirY:1,health:1,speed:1}
+    ]
+  },
+  {
+    walls: [{x:100,y:100,w:400,h:20},{x:100,y:200,w:20,h:200}],
+    key: {x:120,y:350},
+    exit: {x: 580, y: 50, w: 30, h: 50},
+    enemies: [
+      {x:300,y:150,size:20,dirX:-1,dirY:0,health:1,speed:2},
+      {x:500,y:300,size:20,dirX:0,dirY:-1,health:1,speed:1},
+      {x:250,y:400,size:20,dirX:1,dirY:0,health:1,speed:1}
+    ]
+  }
+];
+
+function loadLevel(index) {
+  let lvl = levels[index];
+  walls = lvl.walls;
+  keyItem = {...lvl.key};
+  exitZone = {...lvl.exit};
+  enemies = lvl.enemies.map(e => ({...e}));
+  hasKey = false;
+  player.x = 50; player.y = 50;
+}
+
+loadLevel(currentLevel);
+
+// Input
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+document.getElementById("up").ontouchstart = () => keys["ArrowUp"] = true;
+document.getElementById("up").ontouchend = () => keys["ArrowUp"] = false;
+document.getElementById("down").ontouchstart = () => keys["ArrowDown"] = true;
+document.getElementById("down").ontouchend = () => keys["ArrowDown"] = false;
+document.getElementById("left").ontouchstart = () => keys["ArrowLeft"] = true;
+document.getElementById("left").ontouchend = () => keys["ArrowLeft"] = false;
+document.getElementById("right").ontouchstart = () => keys["ArrowRight"] = true;
+document.getElementById("right").ontouchend = () => keys["ArrowRight"] = false;
+document.getElementById("shoot").ontouchstart = () => shootBullet();
+document.getElementById("start").ontouchstart = () => {
+  if (gameState !== "playing") {
+    currentLevel = 0;
+    player.health = 3;
+    gameState = "playing";
+    loadLevel(currentLevel);
+  }
+};
+
+// Shooting
+function shootBullet() {
+  bullets.push({
+    x: player.x+player.size/2,
+    y: player.y+player.size/2,
+    dx: player.dirX*4,
+    dy: player.dirY*4
+  });
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === " " && gameState === "playing") shootBullet();
+});
+
+// Update
+function update() {
+  if (gameState !== "playing") return;
+
+  let dx = 0, dy = 0;
+  if (keys["ArrowUp"] || keys["w"]) dy = -1;
+  if (keys["ArrowDown"] || keys["s"]) dy = 1;
+  if (keys["ArrowLeft"] || keys["a"]) dx = -1;
+  if (keys["ArrowRight"] || keys["d"]) dx = 1;
+
+  if (dx !== 0 || dy !== 0) {
+    player.dirX = dx;
+    player.dirY = dy;
+    player.x += dx*player.speed;
+    player.y += dy*player.speed;
+  }
+
+  // Bullets
+  bullets.forEach(b => { b.x += b.dx; b.y += b.dy; });
+
+  // Collisions
+  if (!hasKey &&
+      player.x < keyItem.x+15 && player.x+player.size > keyItem.x &&
+      player.y < keyItem.y+15 && player.y+player.size > keyItem.y) {
+    hasKey = true;
+  }
+
+  if (hasKey &&
+      player.x < exitZone.x+exitZone.w && player.x+player.size > exitZone.x &&
+      player.y < exitZone.y+exitZone.h && player.y+player.size > exitZone.y) {
+    currentLevel++;
+    if (currentLevel < levels.length) {
+      loadLevel(currentLevel);
+    } else {
+      gameState = "win";
+    }
+  }
+
+  // Enemies
+  enemies.forEach(e => {
+    e.x += e.dirX*e.speed;
+    e.y += e.dirY*e.speed;
+    if (Math.random() < 0.01) { // change direction randomly
+      let dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      let d = dirs[Math.floor(Math.random()*dirs.length)];
+      e.dirX = d[0]; e.dirY = d[1];
+    }
+
+    // Contact damage
+    if (player.x < e.x+e.size && player.x+player.size > e.x &&
+        player.y < e.y+e.size && player.y+player.size > e.y) {
+      player.health -= 1;
+      if (player.health <= 0) gameState = "lose";
+    }
   });
 
-  // Add a second level that's larger / different layout
-  state.levels.push({
-    name: "Extraction: Sublevel B",
-    width: 24, height: 18,
-    grid: (function(){
-      const w=24,h=18; const arr=[];
-      for(let y=0;y<h;y++){
-        for(let x=0;x<w;x++){
-          if (y===0 || y===h-1 || x===0 || x===w-1) arr.push(1);
-          else arr.push(0);
-        }
+  // Bullet hits
+  bullets.forEach((b, bi) => {
+    enemies.forEach((e, ei) => {
+      if (b.x < e.x+e.size && b.x > e.x && b.y < e.y+e.size && b.y > e.y) {
+        e.health--;
+        bullets.splice(bi,1);
+        if (e.health <= 0) enemies.splice(ei,1);
       }
-      // add some obstacles
-      for(let x=3;x<21;x++){ arr[5*24 + x]=1; arr[11*24 + x]=1; }
-      arr[5*24 + 10]=0; arr[11*24 + 14]=0; // gaps
-      return arr;
-    })(),
-    playerStart: {x: 2*TILE+2, y: 2*TILE+2},
-    enemiesDef: [{x: 10*TILE, y: 6*TILE, patrol:[{x:10*TILE,y:6*TILE},{x:14*TILE,y:6*TILE}]},{x:18*TILE,y:12*TILE,patrol:[{x:18*TILE,y:12*TILE},{x:6*TILE,y:12*TILE}]}],
-    pickupsDef: [{type:'key', x: 20*TILE, y: 3*TILE},{type:'health', x:12*TILE,y:2*TILE}],
-    doorsDef: [{x: 22*TILE, y: 9*TILE, locked:true}]
+    });
   });
+}
 
-  /*** INITIALIZATION ***/
-  function initLevel(index){
-    state.bullets = [];
-    state.enemies = [];
-    state.pickups = [];
-    state.walls = [];
-    state.keysCollected = 0;
-    state.paused = false;
-    state.gameOver = false;
+// Draw entities
+function drawEntity(entity, color, dirX, dirY) {
+  ctx.fillStyle = color;
+  ctx.fillRect(entity.x, entity.y, entity.size, entity.size);
+  ctx.strokeStyle = "white";
+  ctx.beginPath();
+  ctx.moveTo(entity.x+entity.size/2, entity.y+entity.size/2);
+  ctx.lineTo(entity.x+entity.size/2 + dirX*10, entity.y+entity.size/2 + dirY*10);
+  ctx.stroke();
+}
 
-    const lvl = state.levels[index];
-    state.levelIndex = index;
+// Draw
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // create walls from grid
-    for(let y=0;y<lvl.height;y++){
-      for(let x=0;x<lvl.width;x++){
-        const v = lvl.grid[y*lvl.width + x];
-        if (v === 1){
-          state.walls.push({x: x*TILE, y: y*TILE, w: TILE, h: TILE});
-        }
-      }
-    }
-
-    // doors
-    (lvl.doorsDef || []).forEach(d => {
-      state.walls.push({x:d.x,y:d.y,w:TILE,h:TILE, isDoor:true, locked: !!d.locked});
-    });
-
-    // pickups
-    (lvl.pickupsDef || []).forEach(p => {
-      const obj = {type:p.type, x:p.x, y:p.y, w:12, h:12, taken:false};
-      state.pickups.push(obj);
-    });
-
-    // enemies
-    (lvl.enemiesDef || []).forEach(e => {
-      state.enemies.push({
-        x:e.x, y:e.y, w:14, h:14, patrol:e.patrol || [], pIndex:0, speed: ENEMY_SPEED, alerted:false, lastSeen:-Infinity
-      });
-    });
-
-    // player
-    state.player = {
-      x: lvl.playerStart.x, y: lvl.playerStart.y, w:14, h:14,
-      speed: PLAYER_SPEED, health: 3, facing:0
-    };
-
-    updateHUD();
+  if (gameState === "win") {
+    ctx.fillStyle = "lime";
+    ctx.font = "30px monospace";
+    ctx.fillText("YOU WIN!", 250, 200);
+    ctx.fillText("Press Start", 250, 250);
+    return;
+  }
+  if (gameState === "lose") {
+    ctx.fillStyle = "red";
+    ctx.font = "30px monospace";
+    ctx.fillText("GAME OVER", 240, 200);
+    ctx.fillText("Press Start", 240, 250);
+    return;
   }
 
-  /*** RAYCAST for LOS */
-  function canSee(enemy, target, maxDist=120){
-    const ex = enemy.x + enemy.w/2, ey = enemy.y + enemy.h/2;
-    const tx = target.x + target.w/2, ty = target.y + target.h/2;
-    const dx = tx - ex, dy = ty - ey;
-    const d = Math.sqrt(dx*dx + dy*dy);
-    if (d > maxDist) return false;
-    const steps = Math.ceil(d / 4);
-    for(let i=1;i<=steps;i++){
-      const sx = ex + dx*(i/steps);
-      const sy = ey + dy*(i/steps);
-      // check collision with walls
-      for(const w of state.walls){
-        if (sx > w.x && sx < w.x + w.w && sy > w.y && sy < w.y + w.h) return false;
-      }
-    }
-    return true;
+  // Walls
+  ctx.fillStyle = "#555";
+  walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+  // Exit
+  ctx.fillStyle = hasKey ? "green" : "red";
+  ctx.fillRect(exitZone.x, exitZone.y, exitZone.w, exitZone.h);
+
+  // Key
+  if (!hasKey) {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(keyItem.x, keyItem.y, 15, 15);
   }
 
-  /*** GAME LOOP ***/
-  let lastTime = 0;
-  function loop(ts){
-    if (!lastTime) lastTime = ts;
-    const dt = Math.min(40, ts - lastTime) / 16.666; // scaled delta for consistent speed
-    lastTime = ts;
-    if (!state.paused && !state.gameOver){
-      update(dt);
-    }
-    render();
-    requestAnimationFrame(loop);
-  }
+  // Player
+  drawEntity(player, "blue", player.dirX, player.dirY);
 
-  /*** UPDATE ***/
-  function update(dt){
-    const i = input.getInputState();
+  // Enemies
+  enemies.forEach(e => drawEntity(e, "red", e.dirX, e.dirY));
 
-    // Player movement
-    let mvx = 0, mvy = 0;
-    if (i.left) mvx = -1;
-    if (i.right) mvx = +1;
-    if (i.up) mvy = -1;
-    if (i.down) mvy = +1;
-    // normalize
-    if (mvx !== 0 && mvy !== 0){ mvx *= Math.SQRT1_2; mvy *= Math.SQRT1_2; }
-    state.player.x += mvx * state.player.speed * dt * 60/30;
-    state.player.y += mvy * state.player.speed * dt * 60/30;
-    if (mvx || mvy) state.player.facing = Math.atan2(mvy, mvx);
+  // Bullets
+  ctx.fillStyle = "orange";
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, 5, 5));
 
-    // clamp to map bounds
-    const lvl = state.levels[state.levelIndex];
-    state.player.x = clamp(state.player.x, TILE, lvl.width*TILE - TILE*2);
-    state.player.y = clamp(state.player.y, TILE, lvl.height*TILE - TILE*2);
+  // HUD
+  ctx.fillStyle = "white";
+  ctx.font = "16px monospace";
+  ctx.fillText("Health: " + player.health, 10, 20);
+  ctx.fillText("Keys: " + (hasKey ? "1/1" : "0/1"), 10, 40);
+}
 
-    // collisions with walls (simple push-back)
-    for(const w of state.walls){
-      if (rectIntersect(state.player, w)){
-        // push player out by minimal overlap
-        const overlapX = (state.player.x + state.player.w/2) - (w.x + w.w/2);
-        const overlapY = (state.player.y + state.player.h/2) - (w.y + w.h/2);
-        const absX = Math.abs(overlapX), absY = Math.abs(overlapY);
-        const halfW = (state.player.w + w.w) / 2;
-        const halfH = (state.player.h + w.h) / 2;
-        if (absX < halfW && absY < halfH){
-          if (absX > absY){
-            state.player.x += overlapX > 0 ? (halfW - absX) : -(halfW - absX);
-          } else {
-            state.player.y += overlapY > 0 ? (halfH - absY) : -(halfH - absY);
-          }
-        }
-      }
-    }
-
-    // Shooting: basic rate limit
-    if (!state._shootCooldown) state._shootCooldown = 0;
-    state._shootCooldown = Math.max(0, state._shootCooldown - dt);
-    if (i.shoot && state._shootCooldown === 0 && state.bullets.length < MAX_BULLETS){
-      shootBullet();
-      state._shootCooldown = 8/60; // small cooldown
-    }
-
-    // update bullets
-    for(let b = state.bullets.length -1; b >= 0; b--){
-      const bullet = state.bullets[b];
-      bullet.x += bullet.vx * BULLET_SPEED * dt * 60/30;
-      bullet.y += bullet.vy * BULLET_SPEED * dt * 60/30;
-
-      // remove if out of bounds or hit wall
-      if (bullet.x < 0 || bullet.x > lvl.width*TILE || bullet.y < 0 || bullet.y > lvl.height*TILE){
-        state.bullets.splice(b,1);
-        continue;
-      }
-      // collision with walls
-      let hitWall = false;
-      for(const w of state.walls){
-        if (rectIntersect(bullet, w)){
-          hitWall = true;
-          break;
-        }
-      }
-      if (hitWall){ state.bullets.splice(b,1); continue; }
-
-      // collision with enemies
-      for(let e = state.enemies.length-1; e>=0; e--){
-        if (rectIntersect(bullet, state.enemies[e])){
-          // kill enemy
-          state.enemies.splice(e,1);
-          state.bullets.splice(b,1);
-          break;
-        }
-      }
-    }
-
-    // pickups
-    for(const p of state.pickups){
-      if (!p.taken && rectIntersect(state.player, p)){
-        p.taken = true;
-        if (p.type === 'key') state.keysCollected++;
-        if (p.type === 'health') state.player.health = Math.min(5, state.player.health + 1);
-        updateHUD();
-      }
-    }
-
-    // door unlock (player collides with door and has key)
-    for(const w of state.walls){
-      if (w.isDoor && w.locked && rectIntersect(state.player, w) && state.keysCollected > 0){
-        w.locked = false; state.keysCollected--; updateHUD();
-      }
-    }
-
-    // enemy AI: patrol and LOS
-    for(const e of state.enemies){
-      // patrol movement
-      if (e.patrol && e.patrol.length){
-        const target = e.patrol[e.pIndex];
-        const dx = target.x - e.x, dy = target.y - e.y;
-        const d = Math.sqrt(dx*dx + dy*dy);
-        if (d < 2) e.pIndex = (e.pIndex + 1) % e.patrol.length;
-        else {
-          e.x += (dx / d) * e.speed * dt * 60/30;
-          e.y += (dy / d) * e.speed * dt * 60/30;
-        }
-      }
-
-      // LOS check
-      const sees = canSee(e, state.player, 120);
-      if (sees){
-        // chase
-        const dx = (state.player.x - e.x), dy = (state.player.y - e.y);
-        const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        e.x += (dx / d) * e.speed * dt * 90/30;
-        e.y += (dy / d) * e.speed * dt * 90/30;
-        e.alerted = true;
-        e.lastSeen = performance.now();
-      } else {
-        // cool down alert
-        if (e.alerted && performance.now() - e.lastSeen > 2000){
-          e.alerted = false;
-        }
-      }
-
-      // collision enemy <-> player
-      if (rectIntersect(e, state.player)){
-        // damage player and knock back slightly
-        if (!e._damageCooldown) e._damageCooldown = 0;
-        if (e._damageCooldown <= 0){
-          state.player.health -= 1;
-          e._damageCooldown = 1000; // ms
-          state.player.x -= (e.x < state.player.x) ? 6 : -6;
-          state.player.y -= (e.y < state.player.y) ? 6 : -6;
-          updateHUD();
-          if (state.player.health <= 0){
-            triggerGameOver();
-          }
-        }
-      }
-      // reduce damage cooldown
-      if (e._damageCooldown) e._damageCooldown = Math.max(0, e._damageCooldown - dt*16.66);
-    }
-
-  }
-
-  /*** SHOOTING ***/
-  function shootBullet(){
-    const p = state.player;
-    // direction from facing or last movement
-    const angle = p.facing || 0;
-    const vx = Math.cos(angle) || 1;
-    const vy = Math.sin(angle) || 0;
-    const b = {x: p.x + p.w/2 - 2, y: p.y + p.h/2 - 2, w:4, h:4, vx, vy};
-    state.bullets.push(b);
-  }
-
-  /*** RENDER ***/
-  function render(){
-    // clear
-    ctx.fillStyle = "#0a0a0a";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    // draw floor (simple grid)
-    drawGrid();
-
-    // draw walls
-    for(const w of state.walls){
-      if (w.isDoor){
-        ctx.fillStyle = w.locked ? "#6b2e8a" : "#4b4b4b";
-      } else ctx.fillStyle = "#444";
-      ctx.fillRect(w.x, w.y, w.w, w.h);
-    }
-
-    // draw pickups
-    for(const p of state.pickups){
-      if (p.taken) continue;
-      if (p.type === 'key'){
-        drawKey(p.x, p.y);
-      } else if (p.type === 'health'){
-        drawHeart(p.x, p.y);
-      }
-    }
-
-    // draw player
-    drawPlayer(state.player.x, state.player.y, state.player.w, state.player.h);
-
-    // draw bullets
-    ctx.fillStyle = "#ffea00";
-    state.bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
-
-    // draw enemies
-    for(const e of state.enemies){
-      drawEnemy(e.x, e.y, e.w, e.h, e.alerted);
-      // optional: draw LOS cone
-      ctx.strokeStyle = e.alerted ? "rgba(255,60,60,.5)" : "rgba(255,255,255,.06)";
-      ctx.beginPath();
-      ctx.moveTo(e.x+e.w/2, e.y+e.h/2);
-      // small fan lines
-      for(let a=-0.8; a<=0.8; a+=0.4){
-        const ang = Math.atan2(state.player.y - e.y, state.player.x - e.x) + a;
-        ctx.lineTo(e.x + e.w/2 + Math.cos(ang)*120, e.y + e.h/2 + Math.sin(ang)*120);
-        ctx.moveTo(e.x+e.w/2, e.y+e.h/2);
-      }
-      ctx.stroke();
-    }
-
-    // HUD drawn via DOM so nothing to do here (but we draw level name small)
-    ctx.fillStyle = "#ccc";
-    ctx.font = "8px monospace";
-    ctx.fillText(state.levels[state.levelIndex].name, 6, BASE_H - 6);
-  }
-
-  function drawGrid(){
-    const lvl = state.levels[state.levelIndex];
-    ctx.fillStyle = "#0f0f0f";
-    for(let y=0;y<lvl.height;y++){
-      for(let x=0;x<lvl.width;x++){
-        // subtle floor tiles: alternate slightly
-        const shade = ((x+y)%2==0) ? "#0b0b0b" : "#0f0f0f";
-        ctx.fillStyle = shade;
-        ctx.fillRect(x*TILE, y*TILE, TILE, TILE);
-      }
-    }
-  }
-
-  /*** DRAW FALLBACK SPRITES (procedural) ***/
-  function drawPlayer(x,y,w,h){
-    // helmet + body in olive green
-    ctx.fillStyle = "#2e8b2e"; ctx.fillRect(x,y,w,h);
-    ctx.fillStyle = "#1f5e1f"; ctx.fillRect(x+2,y+2,w-4,4); // visor/face
-    ctx.fillStyle = "#0b0b0b"; ctx.fillRect(x+4,y+h-5, w-8,2); // boots
-  }
-  function drawEnemy(x,y,w,h, alerted){
-    ctx.fillStyle = alerted ? "#9b1e1e" : "#8b2f2f";
-    ctx.fillRect(x,y,w,h);
-    ctx.fillStyle = "#2b2b2b"; ctx.fillRect(x+3,y+3,w-6,h-6);
-  }
-  function drawKey(x,y){
-    ctx.fillStyle = "#00d6ff";
-    ctx.fillRect(x, y, 10, 6);
-    ctx.fillRect(x+8,y-3,3,3);
-  }
-  function drawHeart(x,y){
-    ctx.fillStyle = "#ff4b4b";
-    ctx.beginPath();
-    ctx.moveTo(x+6,y+8);
-    ctx.arc(x+4,y+6,3,0,Math.PI,true);
-    ctx.arc(x+8,y+6,3,0,Math.PI,true);
-    ctx.fill();
-  }
-
-  /*** HUD (DOM) ***/
-  function updateHUD(){
-    document.getElementById('hud-health').textContent = 'Health: ' + state.player.health;
-    document.getElementById('hud-keys').textContent = 'Keys: ' + state.keysCollected;
-    document.getElementById('hud-level').textContent = 'Level: ' + (state.levelIndex + 1);
-  }
-
-  /*** LEVEL FLOW ***/
-  function nextLevel(){
-    const next = state.levelIndex + 1;
-    if (next < state.levels.length) initLevel(next);
-    else {
-      // wrap or show victory
-      alert("Mission Complete — All levels cleared!");
-      initLevel(0);
-    }
-    updateHUD();
-  }
-
-  function triggerGameOver(){
-    state.gameOver = true;
-    state.paused = true;
-    document.getElementById('pauseOverlay').classList.remove('hidden');
-    document.getElementById('pauseOverlay').querySelector('h2').textContent = 'Mission Failed';
-  }
-
-  /*** PAUSE / UI BINDINGS ***/
-  const pauseOverlay = document.getElementById('pauseOverlay');
-  document.getElementById('resumeBtn').addEventListener('click', ()=>{ state.paused=false; pauseOverlay.classList.add('hidden'); });
-  document.getElementById('restartBtn').addEventListener('click', ()=>{ initLevel(state.levelIndex); pauseOverlay.classList.add('hidden'); });
-  document.getElementById('exitBtn').addEventListener('click', ()=>{ initLevel(0); pauseOverlay.classList.add('hidden'); });
-
-  // Start / Select mapping
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Enter'){ state.paused = !state.paused; pauseOverlay.classList.toggle('hidden'); }
-    if (e.code === 'Escape'){ state.paused = true; pauseOverlay.classList.remove('hidden'); }
-  });
-
-  // Hook action buttons (A => shoot; B => alt)
-  document.getElementById('btnA').addEventListener('click', ()=>{ input.getInputState().shoot = true; setTimeout(()=>{ input.getInputState().shoot = false; }, 80); });
-
-  // Small helper to pick up keys to progress to next level if door unlocked and player reaches exit
-  function checkLevelComplete(){
-    // define exit area as right-bottom corner tile (example)
-    const lvl = state.levels[state.levelIndex];
-    const exitBox = {x:(lvl.width-2)*TILE, y:(lvl.height-2)*TILE, w:TILE, h:TILE};
-    if (rectIntersect(state.player, exitBox)){
-      // only allow if no locked doors remain
-      const locked = state.walls.some(w => w.isDoor && w.locked);
-      if (!locked) nextLevel();
-    }
-  }
-
-  // hook interval to check level complete
-  setInterval(checkLevelComplete, 500);
-
-  /*** INIT ***/
-  initLevel(0);
-  lastTime = 0;
-  requestAnimationFrame(loop);
-
-  // expose for debugging
-  window.__GAME = { state, initLevel, nextLevel };
-
-})();
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+gameLoop();
