@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Top-Down Shooter (GBA Style)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="gba-container">
+    <div class="screen">
+      <canvas id="gameCanvas" width="320" height="240"></canvas>
+    </div>
+
+    <div class="controls">
+      <!-- D-Pad -->
+      <div class="dpad">
+        <button class="btn up" data-key="ArrowUp">▲</button>
+        <div>
+          <button class="btn left" data-key="ArrowLeft">◀</button>
+          <button class="btn right" data-key="ArrowRight">▶</button>
+        </div>
+        <button class="btn down" data-key="ArrowDown">▼</button>
+      </div>
+
+      <!-- A/B buttons -->
+      <div class="ab">
+        <button class="btn a" data-key="Space">A</button>
+        <button class="btn b" data-key="KeyZ">B</button>
+      </div>
+    </div>
+
+    <!-- Start/Select -->
+    <div class="start-select">
+      <button class="btn small" data-key="Enter">Start</button>
+      <button class="btn small" data-key="ShiftRight">Select</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+  <script src="input.js"></script>
+</body>
+</html>
