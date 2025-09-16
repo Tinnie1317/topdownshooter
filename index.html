@@ -1,71 +1,46 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Top-Down Retro Shooter — GBA Shell</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="gba-shell">
-    <header class="gba-header">
-      <div class="logo">Faux Fleurs Operations</div>
-    </header>
+<script>
+// Direction indicators
+function drawEntity(ctx, entity, color, dirX, dirY) {
+  ctx.fillStyle = color;
+  ctx.fillRect(entity.x, entity.y, entity.size, entity.size);
+  // Facing arrow
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.moveTo(entity.x + entity.size/2, entity.y + entity.size/2);
+  ctx.lineTo(entity.x + entity.size/2 + dirX*10, entity.y + entity.size/2 + dirY*10);
+  ctx.stroke();
+}
 
-    <main class="gba-screen">
-      <div class="screen-bezel">
-        <canvas id="gameCanvas" width="320" height="240"></canvas>
-      </div>
+// Replace player/enemy drawing:
+function drawGame() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      <div class="hud-row">
-        <div id="hud-health" class="hud">Health: 3</div>
-        <div id="hud-keys"  class="hud">Keys: 0</div>
-        <div id="hud-level" class="hud">Level: 1</div>
-      </div>
-    </main>
+  // Walls
+  ctx.fillStyle = "#555";
+  walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
 
-    <nav class="controls-panel">
-      <!-- D-Pad -->
-      <div class="dpad" id="dpad">
-        <button class="pad up" data-key="ArrowUp" aria-label="Up"></button>
-        <div class="midrow">
-          <button class="pad left" data-key="ArrowLeft" aria-label="Left"></button>
-          <button class="pad right" data-key="ArrowRight" aria-label="Right"></button>
-        </div>
-        <button class="pad down" data-key="ArrowDown" aria-label="Down"></button>
-      </div>
+  // Exit door
+  ctx.fillStyle = hasKey ? "green" : "red";
+  ctx.fillRect(exitZone.x, exitZone.y, exitZone.w, exitZone.h);
 
-      <!-- Action buttons -->
-      <div class="actions">
-        <button class="action b" data-key="KeyX" id="btnB">B</button>
-        <button class="action a" data-key="Space" id="btnA">A</button>
-      </div>
+  // Key
+  if (!hasKey) {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(keyItem.x, keyItem.y, 15, 15);
+  }
 
-      <!-- Start/Select -->
-      <div class="start-select">
-        <button class="small start" data-key="Enter">Start</button>
-        <button class="small select" data-key="ShiftRight">Select</button>
-      </div>
-    </nav>
+  // Player
+  drawEntity(ctx, player, "blue", player.dirX, player.dirY);
 
-    <!-- Pause overlay -->
-    <div id="pauseOverlay" class="overlay hidden">
-      <div class="overlay-card">
-        <h2>Paused</h2>
-        <div class="overlay-actions">
-          <button id="resumeBtn">Resume</button>
-          <button id="restartBtn">Restart Level</button>
-          <button id="exitBtn">Exit to Level 1</button>
-        </div>
-      </div>
-    </div>
+  // Enemies
+  enemies.forEach(e => drawEntity(ctx, e, "red", e.dirX, e.dirY));
 
-    <footer class="gba-footer">
-      <small>Built for local testing — press A to shoot, B for special</small>
-    </footer>
-  </div>
+  // Bullets
+  ctx.fillStyle = "orange";
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, 5, 5));
 
-  <script src="input.js"></script>
-  <script src="game.js"></script>
-</body>
-</html>
+  // HUD
+  ctx.fillStyle = "white";
+  ctx.fillText("Health: " + player.health, 10, 20);
+  ctx.fillText("Keys: " + (hasKey ? "1/1" : "0/1"), 10, 40);
+}
